@@ -40,6 +40,7 @@ parser.add_argument('--clear_steps', action='store_true')
 parser.add_argument('--finetune', type=str, default=None)
 parser.add_argument('--name', type=str, default=None)
 parser.add_argument('--logs', type=str, default='')
+parser.add_argument('-m','--masked', action='store_true')
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -73,7 +74,7 @@ def main():
         cfg = json.load(f)
         image_size = cfg.get('image_size', [128, 128, 128])
         image_type = cfg.get('image_type')
-    framework = Framework(devices=gpus, image_size=image_size, segmentation_class_value=cfg.get('segmentation_class_value', None), fast_reconstruction = args.fast_reconstruction)
+    framework = Framework(devices=gpus, image_size=image_size, segmentation_class_value=cfg.get('segmentation_class_value', None), fast_reconstruction = args.fast_reconstruction, masked=args.masked)
     Dataset = eval('data_util.{}.Dataset'.format(image_type))
     print('Graph built.')
 
@@ -84,7 +85,7 @@ def main():
         ret.update([(k + ':0', v) for k, v in kwargs.items()])
         return ret
 
-    with tf.Session(config=tf.ConfigProto()) as sess:
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         saver = tf.train.Saver(tf.get_collection(
             tf.GraphKeys.GLOBAL_VARIABLES), max_to_keep=5, keep_checkpoint_every_n_hours=5)
         if args.checkpoint is None:
@@ -173,6 +174,7 @@ def main():
 
         last_save_stamp = time.time()
 
+        print('Training start')
         while True:
             if hasattr(framework, 'get_lr'):
                 lr = framework.get_lr(steps, batchSize)
@@ -180,11 +182,13 @@ def main():
                 lr = get_lr(steps)
             t0 = default_timer()
             fd = next(generator)
+            # print('seg value', np.unique(fd['seg2']), np.unique(fd['seg1']))
             fd.pop('mask', [])
             fd.pop('id1', [])
             fd.pop('id2', [])
             t1 = default_timer()
             tflearn.is_training(True, session=sess)
+            # print('Start session run')
             summ, _ = sess.run([framework.summaryExtra, framework.adamOpt],
                                set_tf_keys(fd, learningRate=lr))
 
@@ -219,6 +223,7 @@ def main():
 
                 if time.time() - last_save_stamp > 3600 or steps % iterationSize == iterationSize - 500:
                     last_save_stamp = time.time()
+                    print('Save model')
                     saver.save(sess, os.path.join(modelPrefix, 'model'),
                                global_step=steps, write_meta_graph=False)
 
@@ -232,7 +237,8 @@ def main():
                             tf.Summary.Value(tag='val_' + k, simple_value=v) for k, v in metrics.items()
                         ])
                         summaryWriter.add_summary(val_summ, steps)
-                    except:
+                    except Exception as e:
+                        print(e)
                         if steps == args.val_steps:
                             print('Step {}, validation failed!'.format(steps))
     print('Finished.')

@@ -1,0 +1,85 @@
+{
+  "files": {
+    "/": {
+      "type": "HDF5",
+      "path": "datasets/msd_dataset.h5"
+    },
+    "youyi": {
+      "type": "HDF5",
+      "path": "datasets/youyi_liver.h5"
+    },
+    "yanx": {
+      "type": "HDF5",
+      "path": "datasets/sliver_val.h5"
+    },
+    "lits": {
+      "type": "HDF5",
+      "path": "datasets/lits.h5"
+    },
+    "pigs": {
+      "type": "HDF5",
+      "path": "datasets/lspig_val.h5"
+    }
+  },
+  "image_size": [
+    128,
+    128,
+    128
+  ],
+  "image_type": "liver",
+  "segmentation_class_value" : {
+    "liver": 1,
+    "tumor": 2
+  },
+  "schemes": {
+    "1": {
+      "combine-train": 1.0
+    },
+    "2": {
+      "lits-val": 1.0
+    },
+    "sliver": {
+      "sliver-val": 1.0
+    },
+    "lits": {
+      "lits-val": 1.0
+    },
+    "lspig": {
+      "lspig-val": 1.0
+    }
+  },
+  "subsets": {
+    "combine-train": [
+      "lits/0",
+      "lits/1",
+      "lits/10",
+      "lits/100",
+      "lits/101",
+      "lits/102",
+      "lits/103",
+      "lits/104",
+      "lits/105",
+      "lits/106",
+      "lits/107",
+      "lits/108",
+      "lits/109",
+      "lits/11",
+      "lits/110",
+      "lits/111",
+      "lits/112",
+      "lits/113",
+      "lits/114"
+    ],
+    "sliver-val": [
+      "yanx/10",
+      "yanx/11",
+      "yanx/17"
+    ],
+    "lits-val": [
+      "lits/0",
+      "lits/106",
+      "lits/2"
+    ]
+  }
+}
+

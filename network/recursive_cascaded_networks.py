@@ -1,3 +1,4 @@
+from pprint import pprint
 import tensorflow as tf
 import tflearn
 import numpy as np
@@ -55,7 +56,7 @@ class RecursiveCascadedNetworks(Network):
             for k, v in self.default_params.items():
                 if k not in param:
                     param[k] = v
-        print(self.stems)
+        # print(self.stems)
 
         self.framework = framework
         self.warp_gradient = warp_gradient
@@ -80,6 +81,10 @@ class RecursiveCascadedNetworks(Network):
         stem_result['warped'] = self.reconstruction(
             [img2, stem_result['flow']])
         stem_result['agg_flow'] = stem_result['flow']
+        # only to get tumor
+        seg = seg2>1.5
+        seg = tf.cast(seg, tf.float32)
+        stem_result['mask'] = self.reconstruction([seg, stem_result['agg_flow']]) > 0.5
         stem_results.append(stem_result)
 
         for stem, params in self.stems[1:]:
@@ -99,8 +104,18 @@ class RecursiveCascadedNetworks(Network):
                     [stem_results[-1]['agg_flow'], stem_result['flow']]) + stem_result['flow']
             stem_result['warped'] = self.reconstruction(
                 [img2, stem_result['agg_flow']])
+            # Add mask in stem
+            stem_result['mask'] = self.reconstruction([seg, stem_result['agg_flow']]) > 0.5
             stem_results.append(stem_result)
+        # pprint(stem_results)
+        if tflearn.get_training_mode():
+            for i, stem_result in enumerate(stem_results):
+                tf.summary.image(f"Layer {i}/warped seg2", tf.cast(stem_result['mask'][:1,..., 64,:], tf.float32))
+                tf.summary.image(f"Layer {i}/mask", tf.cast(tf.logical_or(stem_result['mask'],(seg1>1.5))[:1,..., 64,:], tf.float32))
+            tf.summary.image("seg1", seg1[:1,..., 64,:])
+            tf.summary.image("seg2", seg2[:1,..., 64,:])
 
+        print('if masked:', self.framework.masked)
         # unsupervised learning with simlarity loss and regularization loss
         for stem_result, (stem, params) in zip(stem_results, self.stems):
             if 'W' in stem_result:
@@ -108,14 +123,25 @@ class RecursiveCascadedNetworks(Network):
                     self.det_factor + \
                     stem_result['ortho_loss'] * self.ortho_factor
                 if params['raw_weight'] > 0:
-                    stem_result['raw_loss'] = self.similarity_loss(
-                        img1, stem_result['warped'])
+                    if self.framework.masked:
+                        stem_result['raw_loss'] = self.similarity_loss(
+                            img1, stem_result['warped'], tf.logical_or(stem_result['mask'],(seg1>1.5))
+                        )
+                    else:
+                        stem_result['raw_loss'] = self.similarity_loss(
+                            img1, stem_result['warped']
+                        )
                     stem_result['loss'] = stem_result['loss'] + \
                         stem_result['raw_loss'] * params['raw_weight']
             else:
                 if params['raw_weight'] > 0:
-                    stem_result['raw_loss'] = self.similarity_loss(
-                        img1, stem_result['warped'])
+                    if self.framework.masked:
+                        stem_result['raw_loss'] = self.similarity_loss(
+                            img1, stem_result['warped'], tf.logical_or(stem_result['mask'],(seg1>1.5)))
+                    else:
+                        stem_result['raw_loss'] = self.similarity_loss(
+                            img1, stem_result['warped']
+                        )
                 if params['reg_weight'] > 0:
                     stem_result['reg_loss'] = self.regularize_loss(
                         stem_result['flow']) * self.reg_factor
@@ -146,6 +172,7 @@ class RecursiveCascadedNetworks(Network):
         if self.framework.segmentation_class_value is None:
             seg_fixed = seg1
             warped_seg_moving = self.reconstruction([seg2, flow])
+            # seg mask value should be 255
             dice_score, jacc_score = mask_metrics(seg_fixed, warped_seg_moving)
             jaccs = [jacc_score]
             dices = [dice_score]
@@ -168,10 +195,14 @@ class RecursiveCascadedNetworks(Network):
                 dices.append(class_dice)
                 fixed_segs.append(fixed_seg_class)
                 warped_segs.append(warped_seg_class)
+                if not tflearn.get_training_mode():
+                    tf.Print(class_dice, ['Segmentation {}:{}'.format(k, v), class_dice], summarize=10)
             seg_fixed = tf.stack(fixed_segs, axis=-1)
             warped_seg_moving = tf.stack(warped_segs, axis=-1)
             dice_score, jacc_score = tf.add_n(
                 dices) / len(dices), tf.add_n(jaccs) / len(jaccs)
+            dice_dct = {'dice_'+k: v for k, v in zip(self.framework.segmentation_class_value.keys(), dices)}
+            ret.update(dice_dct)
 
         ret.update({'loss': tf.reshape(loss, (1, )),
                     'dice_score': dice_score,
@@ -203,16 +234,27 @@ class RecursiveCascadedNetworks(Network):
 
         return ret
 
-    def similarity_loss(self, img1, warped_img2):
-        sizes = np.prod(img1.shape.as_list()[1:])
+    def similarity_loss(self, img1, warped_img2, mask=None):
+        # mask: 1 means keeping
+        sizes = np.prod(img1.shape.as_list()[1:])            
         flatten1 = tf.reshape(img1, [-1, sizes])
         flatten2 = tf.reshape(warped_img2, [-1, sizes])
 
         if self.fast_reconstruction:
             _, pearson_r, _ = tf.user_ops.linear_similarity(flatten1, flatten2)
         else:
-            mean1 = tf.reshape(tf.reduce_mean(flatten1, axis=-1), [-1, 1])
-            mean2 = tf.reshape(tf.reduce_mean(flatten2, axis=-1), [-1, 1])
+            if mask is not None:
+                mask = tf.logical_not(mask)
+                mflatten = tf.reshape(tf.cast(mask, tf.float32), [-1, sizes])
+                mask = tf.reshape(mask, [-1, sizes])
+                mean1 = tf.reduce_sum(flatten1 * mflatten, axis=-1, keep_dims=True) / tf.reduce_sum(mflatten, axis=-1, keep_dims=True)
+                mean2 = tf.reduce_sum(flatten2 * mflatten, axis=-1, keep_dims=True) / tf.reduce_sum(mflatten, axis=-1, keep_dims=True)
+                # repeat mean to flatten
+                flatten1 = tf.where(mask, flatten1, tf.tile(mean1, [1, sizes]))
+                flatten2 = tf.where(mask, flatten2, tf.tile(mean2, [1, sizes]))
+            else:
+                mean1 = tf.reshape(tf.reduce_mean(flatten1, axis=-1), [-1, 1])
+                mean2 = tf.reshape(tf.reduce_mean(flatten2, axis=-1), [-1, 1])
             var1 = tf.reduce_mean(tf.square(flatten1 - mean1), axis=-1)
             var2 = tf.reduce_mean(tf.square(flatten2 - mean2), axis=-1)
             cov12 = tf.reduce_mean(

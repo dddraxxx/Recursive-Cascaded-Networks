@@ -1,5 +1,7 @@
 import argparse
 import os
+import pickle
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 import json
 import re
 import numpy as np
@@ -77,9 +79,10 @@ def main():
     Dataset = eval('data_util.{}.Dataset'.format(image_type))
     ds = Dataset(args.dataset, batch_size=args.batch, paired=args.paired, **
                  eval('dict({})'.format(args.data_args)))
+    # print('data_args', args.data_args)
 
-    sess = tf.Session()
-    tf.global_variables_initializer().run()
+    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+    sess.run(tf.global_variables_initializer())
 
     saver = tf.train.Saver(tf.get_collection(
         tf.GraphKeys.GLOBAL_VARIABLES))
@@ -92,7 +95,12 @@ def main():
         val_subsets = args.val_subset.split(',')
 
     tflearn.is_training(False, session=sess)
-    keys = ['pt_mask', 'landmark_dists', 'jaccs', 'dices', 'jacobian_det']
+    keys = ['pt_mask', 'landmark_dists', 'jaccs', 'dices', 'jacobian_det', 'warped_moving', 'real_flow', 'warped_seg_moving']
+    # add keys for each stage
+    for i in range(Framework.net_args['n_cascades']+1):
+        keys.append('warped_moving_{}'.format(i))
+        keys.append('warped_seg_moving_{}'.format(i))
+        keys.append('real_flow_{}'.format(i))
     if not os.path.exists('evaluate'):
         os.mkdir('evaluate')
     path_prefix = os.path.join('evaluate', short_name(checkpoint))
@@ -108,15 +116,21 @@ def main():
         with open(output_fname, 'w') as fo:
             print("Validation subset {}".format(val_subset))
             gen = ds.generator(val_subset, loop=False)
-            results = framework.validate(sess, gen, keys=keys, summary=False, show_tqdm=True)
+            results = framework.validate(sess, gen, keys=keys, summary=False, show_tqdm=True, predict=True)
+            # save results as pickle
+            print('finish saving pkl')
             for i in range(len(results['jaccs'])):
                 print(results['id1'][i], results['id2'][i], np.mean(results['dices'][i]), np.mean(results['jaccs'][i]), np.mean(
-                    results['landmark_dists'][i]), results['jacobian_det'][i], file=fo)
+                    results['landmark_dists'][i]), *results['dices'][i], file=fo)
             print('Summary', file=fo)
             jaccs, dices, landmarks = results['jaccs'], results['dices'], results['landmark_dists']
             jacobian_det = results['jacobian_det']
             print("Dice score: {} ({})".format(np.mean(dices), np.std(
                 np.mean(dices, axis=-1))), file=fo)
+            # Dice score for organ and tumour
+            ks = framework.segmentation_class_value
+            for dice_k, k in zip(dices.transpose(), ks):
+                print("Dice_{} score: {} ({})".format(k, np.mean(dice_k), np.std(dice_k, axis=-1)), file=fo)
             print("Jacc score: {} ({})".format(np.mean(jaccs), np.std(
                 np.mean(jaccs, axis=-1))), file=fo)
             print("Landmark distance: {} ({})".format(np.mean(landmarks), np.std(
@@ -124,6 +138,16 @@ def main():
             print("Jacobian determinant: {} ({})".format(np.mean(
                 jacobian_det), np.std(jacobian_det)), file=fo)
 
+        with open(path_prefix + '.pkl', 'wb') as f:
+            pickle.dump(results, f)
+            
+def save_npy_results(results, path):
+    keys = ['image_fixed', 'warped_moving', 'warped_seg_moving']
+    r = []
+    for key in keys:
+        r.append(np.array(results[key]))
+    r = np.array(r)
+    np.save(path, r)
 
 def short_name(checkpoint):
     cpath, steps = os.path.split(checkpoint)

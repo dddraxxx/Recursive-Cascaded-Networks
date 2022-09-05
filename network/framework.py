@@ -23,7 +23,8 @@ class FrameworkUnsupervised:
     net_args = {'class': RecursiveCascadedNetworks}
     framework_name = 'gaffdfrm'
 
-    def __init__(self, devices, image_size, segmentation_class_value, validation=False, fast_reconstruction=False):
+    def __init__(self, devices, image_size, segmentation_class_value, validation=False, fast_reconstruction=False, masked=False):
+        self.masked = masked
         network_class = self.net_args.get('class', RecursiveCascadedNetworks)
         self.summaryType = self.net_args.pop('summary', 'basic')
 
@@ -108,6 +109,7 @@ class FrameworkUnsupervised:
     def build_summary(self, predictions):
         self.loss = tf.reduce_mean(predictions['loss'])
         for k in predictions:
+            # print(predictions.keys())
             if k.find('loss') != -1:
                 tf.summary.scalar(k, tf.reduce_mean(predictions[k]))
         self.summaryOp = tf.summary.merge_all()
@@ -138,9 +140,10 @@ class FrameworkUnsupervised:
     def validate(self, sess, generator, keys=None, summary=False, predict=False, show_tqdm=False):
         if keys is None:
             keys = ['dice_score', 'landmark_dist', 'pt_mask', 'jacc_score']
-            # if self.segmentation_class_value is not None:
-            #     for k in self.segmentation_class_value:
-            #         keys.append('jacc_{}'.format(k))
+            if self.segmentation_class_value is not None:
+                for k in self.segmentation_class_value:
+                    keys.append('jacc_{}'.format(k))
+                    keys.append('dice_{}'.format(k))
         full_results = dict([(k, list()) for k in keys])
         if not summary:
             full_results['id1'] = []
