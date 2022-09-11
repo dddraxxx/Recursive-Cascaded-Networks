@@ -3,7 +3,9 @@ import json
 import os
 import h5py
 
-from .data import Split
+from data_util.affine_reg import affine_img_seg
+
+# from .data import Split
 
 
 def get_range(imgs):
@@ -50,7 +52,7 @@ class FileManager:
 
 
 class Dataset:
-    def __init__(self, split_path, affine=False, mask=False, paired=False, task=None, batch_size=None):
+    def __init__(self, split_path, affine=None, mask=False, paired=False, task=None, batch_size=None):
         with open(split_path, 'r') as f:
             config = json.load(f)
         self.files = FileManager(config['files'])
@@ -81,6 +83,10 @@ class Dataset:
             self.task = [self.task]
 
         self.batch_size = batch_size
+        self.affine = affine
+        if affine:
+            # read npy
+            self.aff_arr = np.load(affine, allow_pickle=True).item()
 
     def get_pairs_adj(self, data):
         pairs = []
@@ -144,6 +150,8 @@ class Dataset:
                     (batch_size, np.sum(valid_mask), 3), dtype=np.float32) * (-1)
                 ret['id1'] = np.empty((batch_size), dtype='<U40')
                 ret['id2'] = np.empty((batch_size), dtype='<U40')
+                if self.affine:
+                    ret['affine_matrix'] = np.zeros((batch_size, 4, 4), dtype=np.float32)
 
                 i = 0
                 flag = True
@@ -158,6 +166,16 @@ class Dataset:
                         except StopIteration:
                             flag = False
                             break
+
+                        # do elastix registration
+                        if self.affine:
+                            id1 = d1['id']
+                            id2 = d2['id']
+                            total_matrix = self.aff_arr[id1][id2]
+                            # img2 = np.array(d2['volume'])
+                            # seg2 = np.array(d2['segmentation'])
+                            # n_img2, n_seg2 = affine_img_seg(total_matrix, img2, seg2)
+                            ret['affine_matrix'][i] = total_matrix
 
                         ret['voxel1'][i, ..., 0], ret['voxel2'][i, ...,
                                                                 0] = d1['volume'], d2['volume']

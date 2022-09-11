@@ -349,3 +349,4 @@ ASALocalRun/
 
 # datafile
 *.zip
+*.npy

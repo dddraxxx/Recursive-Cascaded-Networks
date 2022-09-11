@@ -108,15 +108,8 @@ def monai_affine(seg2, total_matrix):
     print(aff)
     return res[0]
 # monai_res = monai_affine(seg2, total_matrix)
-# show_img(monai_res)
-scipy_res = scipy_affine(seg2, total_matrix)
-show_img(scipy_res)
-# scipy_res = scipy_affine(seg2, np.array([[1,0,0.2,6],[0,1,0.1,8],[0.1,0.3,1,10],[0,0,0,1]]))
-# #%%
-# params = itk_affine(scipy_res, seg2)
-# print(params)
-#%%
-[(k,tx[0][k]) for k in tx[0].keys()]
+# scipy_res = scipy_affine(seg2, total_matrix)
+# show_img(scipy_res)
 #%%
 def affine_flow(W, b, len1, len2, len3):
     b = np.reshape(b, [1, 1, 1, 3])
@@ -133,10 +126,10 @@ def affine_flow(W, b, len1, len2, len3):
     wz = W[:, 2]
     wz = np.reshape(wz, [ 1, 1, 1, 3])
     return (xr * wx + yr * wy) + (zr * wz + b)
-coord = affine_flow(W,b,*seg2.shape)
+tW, tb = total_matrix[:3,:3], total_matrix[:3,3]
+coord = affine_flow(tW,tb,*seg2.shape)
 
 coord = coord.transpose(-1, 0, 1, 2)
 from scipy.ndimage import map_coordinates
-res = map_coordinates(seg2, coord, order=3, mode='constant', cval=2)
-show_img(res)
-###################################
+res = map_coordinates(seg2, coord, order=1, mode='constant', cval=0)>0.5
+show_img(res).save(f'images/{dir_name}/m_img2_itk2_affine.jpg')

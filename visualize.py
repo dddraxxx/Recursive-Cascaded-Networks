@@ -137,18 +137,33 @@ def elastix_affine(arr1, arr2):
     elastixImageFilter.Execute()
     # return elastixImageFilter.GetResultImage()
     # return the transform
-    return elastixImageFilter.GetTransformParameterMap()
+    return elastixImageFilter
+#%%
+def itk_affine(arr1, arr2):
+    import itk
+    fixed_image = itk.GetImageViewFromArray(arr1)
+    moving_image = itk.GetImageViewFromArray(arr2)
+    parameter_object = itk.ParameterObject.New()
+    affine_parameter_map = parameter_object.GetDefaultParameterMap('affine', 3)
+    parameter_object.AddParameterMap(affine_parameter_map)
 
+    # Call registration function
+    result_image, result_transform_parameters = itk.elastix_registration_method(
+        fixed_image, moving_image, parameter_object=parameter_object)
+    return result_transform_parameters
+    
 #%%
 img1 = dct['img1'][idx,...,0]
 img2 = dct['img2'][idx,...,0]
-# m_img2 = sitk.GetArrayFromImage(elastix_affine(img1, img2))
-# visulize_3d(m_img2, inter_dst=3, save_name=f'images/{dir_name}/m_img2_tx.jpg')
-tx = elastix_affine(img1, img2)
+
+filter = elastix_affine(img1, img2)
+tx = filter.GetTransformParameterMap()[0]
+tx['FinalBSplineInterpolationOrder'] = '0'
+
 seg2 = dct['seg2'][idx,...,0]
-tx[0]['ResampleInterpolator'] = ['FinalNearestNeighborInterpolator']
 m_seg2 = sitk.GetArrayFromImage(sitk.Transformix(sitk.GetImageFromArray(seg2), tx))
-visulize_3d(m_seg2, inter_dst=3, save_name=f'images/{dir_name}/m_seg2_tx.jpg')
+visulize_3d(m_seg2, save_name=f'images/{dir_name}/m_seg2_tx0.jpg')
+
 #%%
 print('elastix affine results: tumour area: {}, organ area {}'.format((m_seg2==2).sum(), (m_seg2==1).sum()))
 #%%

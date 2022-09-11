@@ -41,6 +41,7 @@ parser.add_argument('--finetune', type=str, default=None)
 parser.add_argument('--name', type=str, default=None)
 parser.add_argument('--logs', type=str, default='')
 parser.add_argument('-m','--masked', action='store_true')
+parser.add_argument('-a', '--affine', type=str, default=None)
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -69,12 +70,31 @@ def main():
     Framework.net_args['base_network'] = args.base_network
     Framework.net_args['n_cascades'] = args.n_cascades
     Framework.net_args['rep'] = args.rep
+    # no augmentation for pre_affined training
+    Framework.net_args['augmentation'] = 'identity' if args.affine else None
     Framework.net_args.update(eval('dict({})'.format(args.net_args)))
     with open(os.path.join(args.dataset), 'r') as f:
         cfg = json.load(f)
         image_size = cfg.get('image_size', [128, 128, 128])
         image_type = cfg.get('image_type')
-    framework = Framework(devices=gpus, image_size=image_size, segmentation_class_value=cfg.get('segmentation_class_value', None), fast_reconstruction = args.fast_reconstruction, masked=args.masked)
+
+    # debug snippet
+    Dataset = eval('data_util.{}.Dataset'.format(image_type))
+    # dataset = Dataset(args.dataset,affine=args.affine)
+    # generator = dataset.generator(Split.TRAIN, batch_size=batchSize, loop=True)
+    # create summary writer
+    # writer = tf.summary.FileWriter('debug')
+    # with tf.Session() as sess:
+    #     for i in range(200):
+    #         g = (next(generator))
+    #         print(i)
+    #         # add image to writer
+    #         tf.summary.image('image', g['voxel1'][:1,64])
+    #     summ = tf.summary.merge_all()
+    #     writer.add_summary(sess.run(summ))
+    # tf.summary.FileWriterCache.clear()
+    # return
+    framework = Framework(devices=gpus, image_size=image_size, segmentation_class_value=cfg.get('segmentation_class_value', None), fast_reconstruction = args.fast_reconstruction, masked=args.masked, affine = not bool(args.affine))
     Dataset = eval('data_util.{}.Dataset'.format(image_type))
     print('Graph built.')
 
@@ -111,7 +131,7 @@ def main():
         data_args = eval('dict({})'.format(args.data_args))
         data_args.update(framework.data_args)
         print('data_args', data_args)
-        dataset = Dataset(args.dataset, **data_args)
+        dataset = Dataset(args.dataset,affine=args.affine, **data_args)
         if args.finetune is not None:
             if 'finetune-train-%s' % args.finetune in dataset.schemes:
                 dataset.schemes[Split.TRAIN] = dataset.schemes['finetune-train-%s' %
@@ -223,9 +243,9 @@ def main():
 
                 if time.time() - last_save_stamp > 3600 or steps % iterationSize == iterationSize - 500:
                     last_save_stamp = time.time()
-                    print('Save model')
                     saver.save(sess, os.path.join(modelPrefix, 'model'),
                                global_step=steps, write_meta_graph=False)
+                    print('Save model')
 
                 if args.debug or steps % args.val_steps == 0:
                     try:

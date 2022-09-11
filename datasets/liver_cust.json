@@ -40,7 +40,7 @@
       "lits-sliver-train": 1.0
     },
     "2": {
-      "mini-val": 1.0
+      "slits-val": 1.0
     },
     "mini-val": {
       "mini-val": 1.0

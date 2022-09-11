@@ -178,6 +178,22 @@ def affine_flow(W, b, len1, len2, len3):
     wz = tf.reshape(wz, [-1, 1, 1, 1, 3])
     return (xr * wx + yr * wy) + (zr * wz + b)
 
+def preaffine_flow(W, b, len1, len2, len3):
+    b = tf.reshape(b, [-1, 1, 1, 1, 3])
+    xr = tf.range(0, len1, 1.0, tf.float32)
+    xr = tf.reshape(xr, [1, -1, 1, 1, 1])
+    yr = tf.range(0, len2, 1.0, tf.float32)
+    yr = tf.reshape(yr, [1, 1, -1, 1, 1])
+    zr = tf.range(0, len3, 1.0, tf.float32)
+    zr = tf.reshape(zr, [1, 1, 1, -1, 1])
+    wx = W[:, :, 0]
+    wx = tf.reshape(wx, [-1, 1, 1, 1, 3])
+    wy = W[:, :, 1]
+    wy = tf.reshape(wy, [-1, 1, 1, 1, 3])
+    wz = W[:, :, 2]
+    wz = tf.reshape(wz, [-1, 1, 1, 1, 3])
+    return (xr * wx + yr * wy) + (zr * wz + b)
+
 def det3x3(M):
     M = [[M[:, i, j] for j in range(3)] for i in range(3)]
     return tf.add_n([
@@ -194,11 +210,24 @@ class VTNAffineStem(Network):
     def __init__(self, name, flow_multiplier=1., **kwargs):
         super().__init__(name, **kwargs)
         self.flow_multiplier = flow_multiplier
+        if 'trainable' in kwargs:
+            self.trainable = kwargs['trainable']
 
-    def build(self, img1, img2):
+    def build(self, img1, img2, affine_matrix=None):
         '''
             img1, img2, flow : tensor of shape [batch, X, Y, Z, C]
         '''
+        if not self.trainable:
+            if affine_matrix is None:
+                # channel must be 3
+                return {'flow': tf.tile(tf.zeros_like(img1), [1, 1, 1, 1, 3]),
+                    "loss": tf.constant(0.0)}
+            sx, sy, sz = img1.shape.as_list()[1:4]
+            flow_matrix = affine_matrix - tf.eye(4, batch_shape=[tf.shape(img1)[0]])
+            w, b = flow_matrix[:, :3, :3], flow_matrix[:, :3, 3]
+            flow = preaffine_flow(w, b, sx, sy, sz)
+            return {'flow': flow, "loss": tf.constant(0.0)}
+
         concatImgs = tf.concat([img1, img2], 4, 'coloncatImgs')
 
         dims = 3

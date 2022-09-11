@@ -23,7 +23,7 @@ class FrameworkUnsupervised:
     net_args = {'class': RecursiveCascadedNetworks}
     framework_name = 'gaffdfrm'
 
-    def __init__(self, devices, image_size, segmentation_class_value, validation=False, fast_reconstruction=False, masked=False):
+    def __init__(self, devices, image_size, segmentation_class_value, validation=False, fast_reconstruction=False, masked=False, affine=True):
         self.masked = masked
         network_class = self.net_args.get('class', RecursiveCascadedNetworks)
         self.summaryType = self.net_args.pop('summary', 'basic')
@@ -43,6 +43,8 @@ class FrameworkUnsupervised:
                                 None, 6, 3], name='point1')
         point2 = tf.placeholder(dtype=tf.float32, shape=[
                                 None, 6, 3], name='point2')
+        if not affine:
+            affine_matrix = tf.placeholder(dtype=tf.float32, shape=[None, 4, 4], name='affine_matrix')
 
         bs = tf.shape(img1)[0]
         augImg1, preprocessedImg2 = img1 / 255.0, img2 / 255.0
@@ -84,9 +86,10 @@ class FrameworkUnsupervised:
             adamOptimizer = tf.train.AdamOptimizer(learningRate)
 
         self.segmentation_class_value = segmentation_class_value
+        self.affine = affine
         self.network = network_class(
-            self.framework_name, framework=self, fast_reconstruction=fast_reconstruction, **self.net_args)
-        net_pls = [augImg1, augImg2, seg1, augSeg2, point1, augPt2]
+            self.framework_name, framework=self, fast_reconstruction=fast_reconstruction, affine=self.affine, **self.net_args)
+        net_pls = [augImg1, augImg2, seg1, augSeg2, point1, augPt2, affine_matrix]
         if devices == 0:
             with tf.device("/cpu:0"):
                 self.predictions = self.network(*net_pls)

@@ -38,7 +38,7 @@ class RecursiveCascadedNetworks(Network):
                  base_network, n_cascades, rep=1,
                  det_factor=0.1, ortho_factor=0.1, reg_factor=1.0,
                  extra_losses={}, warp_gradient=True,
-                 fast_reconstruction=False, warp_padding=False,
+                 fast_reconstruction=False, warp_padding=False, affine=True,
                  **kwargs):
         super().__init__(name)
         self.det_factor = det_factor
@@ -46,7 +46,7 @@ class RecursiveCascadedNetworks(Network):
         self.reg_factor = reg_factor
 
         self.base_network = eval(base_network)
-        self.stems = [(VTNAffineStem('affine_stem', trainable=True), {'raw_weight': 0, 'reg_weight': 0})] + sum([
+        self.stems = [(VTNAffineStem('affine_stem', trainable=affine), {'raw_weight': 0, 'reg_weight': 0})] + sum([
             [(self.base_network("deform_stem_" + str(i),
                                 flow_multiplier=1.0 / n_cascades), {'raw_weight': 0})] * rep
             for i in range(n_cascades)], [])
@@ -74,10 +74,10 @@ class RecursiveCascadedNetworks(Network):
     def data_args(self):
         return dict()
 
-    def build(self, img1, img2, seg1, seg2, pt1, pt2):
+    def build(self, img1, img2, seg1, seg2, pt1, pt2, affine_matrix=None):
         stem_results = []
 
-        stem_result = self.stems[0][0](img1, img2)
+        stem_result = self.stems[0][0](img1, img2, affine_matrix=affine_matrix)
         stem_result['warped'] = self.reconstruction(
             [img2, stem_result['flow']])
         stem_result['agg_flow'] = stem_result['flow']
@@ -85,6 +85,10 @@ class RecursiveCascadedNetworks(Network):
         seg = seg2>1.5
         seg = tf.cast(seg, tf.float32)
         stem_result['mask'] = self.reconstruction([seg, stem_result['agg_flow']]) > 0.5
+        organ_seg = tf.cast(seg2>0.5, tf.uint8)
+        flow1_org = tf.cast(self.reconstruction([organ_seg, stem_result['agg_flow']])>0.5, tf.uint8)
+        # ratio for each image
+        stem_result['ratio']= tf.reduce_sum(flow1_org, axis=[1,2,3,4]) / tf.reduce_sum(organ_seg, axis=[1,2,3,4])
         stem_results.append(stem_result)
 
         for stem, params in self.stems[1:]:
@@ -106,14 +110,20 @@ class RecursiveCascadedNetworks(Network):
                 [img2, stem_result['agg_flow']])
             # Add mask in stem
             stem_result['mask'] = self.reconstruction([seg, stem_result['agg_flow']]) > 0.5
+            flow2_org = tf.cast(self.reconstruction([organ_seg, stem_result['agg_flow']])>0.5, tf.uint8)
+            stem_result['ratio']= tf.reduce_sum(flow2_org, axis=[1,2,3,4])/tf.reduce_sum(organ_seg, axis=[1,2,3,4])
             stem_results.append(stem_result)
         # pprint(stem_results)
         if tflearn.get_training_mode():
             for i, stem_result in enumerate(stem_results):
                 tf.summary.image(f"Layer {i}/warped seg2", tf.cast(stem_result['mask'][:1,..., 64,:], tf.float32))
+                tf.summary.image(f"Layer {i}/warped", stem_result['warped'][:1,..., 64,:])
                 tf.summary.image(f"Layer {i}/mask", tf.cast(tf.logical_or(stem_result['mask'],(seg1>1.5))[:1,..., 64,:], tf.float32))
             tf.summary.image("seg1", seg1[:1,..., 64,:])
             tf.summary.image("seg2", seg2[:1,..., 64,:])
+            tf.summary.image("img1", img1[:1,..., 64,:])
+            tf.summary.image("img2", img2[:1,..., 64,:])
+            tf.summary.scalar('organ_ratio', stem_result['ratio'][0])
 
         print('if masked:', self.framework.masked)
         # unsupervised learning with simlarity loss and regularization loss
