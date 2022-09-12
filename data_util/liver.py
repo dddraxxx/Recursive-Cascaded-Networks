@@ -3,7 +3,7 @@ import json
 import os
 import h5py
 
-from data_util.affine_reg import affine_img_seg
+# from data_util.affine_reg import affine_img_seg
 
 # from .data import Split
 
@@ -84,9 +84,7 @@ class Dataset:
 
         self.batch_size = batch_size
         self.affine = affine
-        if affine:
-            # read npy
-            self.aff_arr = np.load(affine, allow_pickle=True).item()
+        self.config = config
 
     def get_pairs_adj(self, data):
         pairs = []
@@ -133,6 +131,10 @@ class Dataset:
                           for k, fraction in scheme.items()]
             fractions = [int(np.round(fraction * batch_size))
                          for k, fraction in scheme.items()]
+            if self.affine:
+                affine_dct = self.config.get('affine_matrix', {})
+                affine_npy = [np.load(affine_dct[k], allow_pickle=True).item()
+                                for k, fraction in scheme.items() if k in affine_dct]
 
             while True:
                 ret = dict()
@@ -156,8 +158,10 @@ class Dataset:
                 i = 0
                 flag = True
                 nums = fractions
+                cnt = -1
                 for gen, num in zip(generators, nums):
                     assert not self.paired or num % 2 == 0
+                    cnt += 1
                     for t in range(num):
                         try:
                             while True:
@@ -171,7 +175,7 @@ class Dataset:
                         if self.affine:
                             id1 = d1['id']
                             id2 = d2['id']
-                            total_matrix = self.aff_arr[id1][id2]
+                            total_matrix = affine_npy[cnt][id1][id2]
                             # img2 = np.array(d2['volume'])
                             # seg2 = np.array(d2['segmentation'])
                             # n_img2, n_seg2 = affine_img_seg(total_matrix, img2, seg2)

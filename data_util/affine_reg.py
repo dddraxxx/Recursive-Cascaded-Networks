@@ -84,21 +84,24 @@ if __name__=='__main__':
     import tqdm
     dataset = Dataset('/home/hynx/regis/Recursive-Cascaded-Networks/datasets/liver_cust.json')
     # 1 is split_train
-    generator = dataset.generator(1, batch_size=1, loop=False)
+    generator = dataset.generator(2, batch_size=1, loop=False)
     affine_dct = {}
-    save_path = '/home/hynx/regis/Recursive-Cascaded-Networks/datasets/slits_train_affine_dct.npy'
+    save_path = '/home/hynx/regis/Recursive-Cascaded-Networks/datasets/slits_val_affine_dct.npy'
+    cnt = 0
     for k in (tqdm.tqdm(generator)):
-        for i in range(50):
-            id1 = k['id1'][0]
-            id2 = k['id2'][0]
-            # print(id1, id2)
-            arr1 = np.array(k['voxel1'], dtype=np.float32)[0,...,0]
-            arr2 = np.array(k['voxel2'], dtype=np.float32)[0,...,0]
-            mtrix = get_pair_affine(arr1, arr2)
-            d1 = affine_dct.setdefault(id1, {})
-            d1.update({id2: mtrix})
-        # break
-        # np.save(save_path, affine_dct)
+        cnt += 1
+        id1 = k['id1'][0]
+        id2 = k['id2'][0]
+        # print(id1, id2)
+        arr1 = np.array(k['voxel1'], dtype=np.float32)[0,...,0]
+        arr2 = np.array(k['voxel2'], dtype=np.float32)[0,...,0]
+        mtrix = get_pair_affine(arr1, arr2)
+        d1 = affine_dct.setdefault(id1, {})
+        d1.update({id2: mtrix})
+        if cnt%50==0:
+            np.save(save_path, affine_dct)
+    if cnt%50!=0:
+        np.save(save_path, affine_dct)
     #%%
     # import numpy as np
     # a = np.load('/home/hynx/regis/Recursive-Cascaded-Networks/datasets/slits_train_affine_dct.npy', allow_pickle=True).item()

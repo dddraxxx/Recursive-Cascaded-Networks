@@ -1301,5 +1301,9 @@
       "pigs/2018_15_aftergas",
       "pigs/2018_15_pregas"
     ]
+  },
+  "affine_matrix": {
+    "lits-sliver-train": "/home/hynx/regis/Recursive-Cascaded-Networks/datasets/slits_train_affine_dct.npy",
+    "slits-val": "/home/hynx/regis/Recursive-Cascaded-Networks/datasets/slits_val_affine_dct.npy"
   }
 }

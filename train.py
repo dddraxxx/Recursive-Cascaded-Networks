@@ -41,7 +41,7 @@ parser.add_argument('--finetune', type=str, default=None)
 parser.add_argument('--name', type=str, default=None)
 parser.add_argument('--logs', type=str, default='')
 parser.add_argument('-m','--masked', action='store_true')
-parser.add_argument('-a', '--affine', type=str, default=None)
+parser.add_argument('-a', '--affine', action='store_true')
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -79,7 +79,7 @@ def main():
         image_type = cfg.get('image_type')
 
     # debug snippet
-    Dataset = eval('data_util.{}.Dataset'.format(image_type))
+    # Dataset = eval('data_util.{}.Dataset'.format(image_type))
     # dataset = Dataset(args.dataset,affine=args.affine)
     # generator = dataset.generator(Split.TRAIN, batch_size=batchSize, loop=True)
     # create summary writer
