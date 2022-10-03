@@ -116,14 +116,14 @@ class RecursiveCascadedNetworks(Network):
         # pprint(stem_results)
         if tflearn.get_training_mode():
             for i, stem_result in enumerate(stem_results):
-                tf.summary.image(f"Layer {i}/warped seg2", tf.cast(stem_result['mask'][:1,..., 64,:], tf.float32))
-                tf.summary.image(f"Layer {i}/warped", stem_result['warped'][:1,..., 64,:])
-                tf.summary.image(f"Layer {i}/mask", tf.cast(tf.logical_or(stem_result['mask'],(seg1>1.5))[:1,..., 64,:], tf.float32))
-            tf.summary.image("seg1", seg1[:1,..., 64,:])
-            tf.summary.image("seg2", seg2[:1,..., 64,:])
-            tf.summary.image("img1", img1[:1,..., 64,:])
-            tf.summary.image("img2", img2[:1,..., 64,:])
-            tf.summary.scalar('organ_ratio', stem_result['ratio'][0])
+                tf.summary.image(f"Layer {i}/warped seg2", tf.cast(stem_result['mask'][:1,64,..., :], tf.float32))
+                tf.summary.image(f"Layer {i}/warped", stem_result['warped'][:1,64,..., :])
+                tf.summary.image(f"Layer {i}/mask", tf.cast(tf.logical_or(stem_result['mask'],(seg1>1.5))[:1,64,..., :], tf.float32))
+            tf.summary.image("seg1", seg1[:1,64,..., :])
+            tf.summary.image("seg2", seg2[:1,64,..., :])
+            tf.summary.image("img1", img1[:1,64,..., :])
+            tf.summary.image("img2", img2[:1,64,..., :])
+            tf.summary.scalar('organ_ratio', stem_results[0]['ratio'][0])
 
         print('if masked:', self.framework.masked)
         # unsupervised learning with simlarity loss and regularization loss

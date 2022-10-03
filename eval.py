@@ -22,7 +22,7 @@ parser.add_argument('--fast_reconstruction', action='store_true')
 parser.add_argument('--paired', action='store_true')
 parser.add_argument('--data_args', type=str, default=None)
 parser.add_argument('--net_args', type=str, default=None)
-parser.add_argument('--name', type=str, default=None)
+parser.add_argument('-n', '--name', type=str, default=None)
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
@@ -79,6 +79,10 @@ def main():
     Dataset = eval('data_util.{}.Dataset'.format(image_type))
     ds = Dataset(args.dataset, batch_size=args.batch, paired=args.paired, **
                  eval('dict({})'.format(args.data_args)))
+    val_subsets = [data_util.liver.Split.VALID]
+    if args.val_subset is not None:
+        val_subsets = args.val_subset.split(',')
+
     # print('data_args', args.data_args)
 
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
@@ -89,10 +93,6 @@ def main():
     checkpoint = args.checkpoint
     saver.restore(sess, checkpoint)
     tflearn.is_training(False, session=sess)
-
-    val_subsets = [data_util.liver.Split.VALID]
-    if args.val_subset is not None:
-        val_subsets = args.val_subset.split(',')
 
     tflearn.is_training(False, session=sess)
     keys = ['pt_mask', 'landmark_dists', 'jaccs', 'dices', 'jacobian_det', 'warped_moving', 'real_flow', 'warped_seg_moving']
@@ -127,14 +127,15 @@ def main():
                 np.mean(dices, axis=-1))), file=fo)
             # Dice score for organ and tumour
             ks = framework.segmentation_class_value
-            for dice_k, k in zip(dices.transpose(), ks):
-                print("Dice_{} score: {} ({})".format(k, np.mean(dice_k), np.std(dice_k, axis=-1)), file=fo)
-            print("Jacc score: {} ({})".format(np.mean(jaccs), np.std(
-                np.mean(jaccs, axis=-1))), file=fo)
-            print("Landmark distance: {} ({})".format(np.mean(landmarks), np.std(
-                np.mean(landmarks, axis=-1))), file=fo)
-            print("Jacobian determinant: {} ({})".format(np.mean(
-                jacobian_det), np.std(jacobian_det)), file=fo)
+            if ks:
+                for dice_k, k in zip(dices.transpose(), ks):
+                    print("Dice_{} score: {} ({})".format(k, np.mean(dice_k), np.std(dice_k, axis=-1)), file=fo)
+                print("Jacc score: {} ({})".format(np.mean(jaccs), np.std(
+                    np.mean(jaccs, axis=-1))), file=fo)
+                print("Landmark distance: {} ({})".format(np.mean(landmarks), np.std(
+                    np.mean(landmarks, axis=-1))), file=fo)
+                print("Jacobian determinant: {} ({})".format(np.mean(
+                    jacobian_det), np.std(jacobian_det)), file=fo)
 
         with open(path_prefix + '.pkl', 'wb') as f:
             pickle.dump(results, f)

@@ -89,7 +89,10 @@ class FrameworkUnsupervised:
         self.affine = affine
         self.network = network_class(
             self.framework_name, framework=self, fast_reconstruction=fast_reconstruction, affine=self.affine, **self.net_args)
-        net_pls = [augImg1, augImg2, seg1, augSeg2, point1, augPt2, affine_matrix]
+        if not affine:
+            net_pls = [augImg1, augImg2, seg1, augSeg2, point1, augPt2, affine_matrix]
+        if affine:
+            net_pls = [augImg1, augImg2, seg1, augSeg2, point1, augPt2]
         if devices == 0:
             with tf.device("/cpu:0"):
                 self.predictions = self.network(*net_pls)

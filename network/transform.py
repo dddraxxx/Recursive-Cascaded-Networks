@@ -157,3 +157,37 @@ def free_form_fields(shape, control_fields, padding='same'):
     flow = tf.reshape(flow, [shape[2], -1, 3, shape[1], shape[0]])
     flow = tf.transpose(flow, [1, 4, 3, 0, 2])
     return flow
+
+if __name__=='__main__':
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
+    import numpy as np
+    # seed np
+    np.random.seed(0)
+    # get random int array
+    arr = np.random.randint(0, 10, (1,3,5,5,5))
+
+    shape = [128,128,128]
+    control_fields = tf.constant(arr.transpose(0,2,3,4,1), dtype=tf.float32)
+    flow = free_form_fields(shape, control_fields)
+    # eval and print flow
+    config = tf.ConfigProto(
+        device_count = {'GPU': 0}
+    )
+    sess = tf.Session(config=config)
+    # sess.run(tf.global_variables_initializer())
+    # run and print control_fields and flow
+    control_fields, flow = sess.run([control_fields, flow])
+    print('control_fields: ', control_fields)
+    print('flow: ', flow.shape, flow)
+
+    print(arr)
+
+
+    # arr = np.random.randint(0,4,(2,2))
+    # print(arr)
+    # print(tf.nn.l2_loss(tf.constant(arr, dtype=tf.float32)).eval(session=sess))
+
+
+

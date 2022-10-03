@@ -312,3 +312,49 @@ class VTNAffineStem(Network):
             'det_loss': det_loss,
             'ortho_loss': ortho_loss
         }
+
+# if main
+if __name__ == '__main__':
+    def ortho_loss(A):
+        I = [[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]]
+        eps = 1e-5
+        epsI = [[[eps * elem for elem in row] for row in Mat] for Mat in I]
+        C = tf.matmul(A, A, True) + epsI
+
+        def elem_sym_polys_of_eigen_values(M):
+            M = [[M[:, i, j] for j in range(3)] for i in range(3)]
+            sigma1 = tf.add_n([M[0][0], M[1][1], M[2][2]])
+            sigma2 = tf.add_n([
+                M[0][0] * M[1][1],
+                M[1][1] * M[2][2],
+                M[2][2] * M[0][0]
+            ]) - tf.add_n([
+                M[0][1] * M[1][0],
+                M[1][2] * M[2][1],
+                M[2][0] * M[0][2]
+            ])
+            sigma3 = tf.add_n([
+                M[0][0] * M[1][1] * M[2][2],
+                M[0][1] * M[1][2] * M[2][0],
+                M[0][2] * M[1][0] * M[2][1]
+            ]) - tf.add_n([
+                M[0][0] * M[1][2] * M[2][1],
+                M[0][1] * M[1][0] * M[2][2],
+                M[0][2] * M[1][1] * M[2][0]
+            ])
+            return sigma1, sigma2, sigma3
+        s1, s2, s3 = elem_sym_polys_of_eigen_values(C)
+        ortho_loss = s1 + (1 + eps) * (1 + eps) * s2 / s3 - 3 * 2 * (1 + eps)
+        ortho_loss = tf.reduce_sum(ortho_loss)
+        return s1,s2,s3, ortho_loss
+    import numpy as np
+    np.random.seed(24)
+    arr = np.random.rand(2, 3, 3)
+
+    import os
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''
+    with tf.Session() as sess:
+        A = tf.constant(arr, dtype=tf.float32)
+        loss = ortho_loss(A)
+        print(sess.run(loss))
+    print(arr)
